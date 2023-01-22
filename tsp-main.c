@@ -164,6 +164,67 @@ void tsp_ompfor(int etape, int lg, chemin_t chemin, int mask)
   }
 }
 
+void tsp_seq_optimized(int etape, int lg, chemin_t chemin, int mask)
+{
+  if (lg + distance[0][chemin[etape-1]]>= minimum)
+    return;
+
+  int ici, dist;
+
+  if (etape == nbVilles)
+    verifier_minimum(lg, chemin);
+  else
+  {
+    ici = chemin[etape - 1];
+
+    for (int i = 1; i < nbVilles; i++)
+    {
+      if (!present(i, mask))
+      {
+        chemin[etape] = i;
+        dist = distance[ici][i];
+        tsp_seq(etape + 1, lg + dist, chemin, mask | (1 << i));
+      }
+    }
+  }
+}
+
+void tsp_ompfor_optimized(int etape, int lg, chemin_t chemin, int mask)
+{
+
+  if (lg + distance[0][chemin[etape-1]]>= minimum)
+    return;
+
+  if (etape > grain) { // version séquentielle
+    tsp_seq_optimized(etape, lg, chemin, mask);}
+    
+  else { // version parallèle
+
+    if (etape == nbVilles)
+      verifier_minimum(lg, chemin);
+
+    int ici, dist;
+    ici = chemin[etape - 1];
+
+    #pragma omp parallel firstprivate(dist)
+    {
+      chemin_t monChemin;
+      memcpy(monChemin, chemin, sizeof(chemin_t));
+
+      #pragma omp for 
+      for (int i = 1; i < nbVilles; i++)
+      {
+        if (!present(i, mask))
+        {
+          monChemin[etape] = i;
+          dist = distance[ici][i];
+          tsp_ompfor_optimized(etape + 1, lg + dist, monChemin, mask | (1 << i));
+        }
+      }
+    }
+  }
+}
+
 int main(int argc, char **argv)
 {
   unsigned long temps;
@@ -185,6 +246,8 @@ int main(int argc, char **argv)
     tsp_seq(1, 0, chemin, 1);
   else if (!strcmp(argv[argc-1],"ompfor")) 
     tsp_ompfor(1, 0, chemin, 1);
+  else if (!strcmp(argv[argc-1],"ompfor_opt")) 
+    tsp_ompcol4(1, 0, chemin, 1);
   else if (!strcmp(argv[argc-1],"ompcol2")) 
     tsp_ompcol2(1, 0, chemin, 1);
   else if (!strcmp(argv[argc-1],"ompcol3")) 

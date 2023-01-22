@@ -148,7 +148,7 @@ void tsp_ompfor(int etape, int lg, chemin_t chemin, int mask)
     #pragma omp parallel firstprivate(dist)
     {
       chemin_t monChemin;
-      memcpy(monChemin, chemin, (etape-1)*sizeof(chemin_t));
+      memcpy(monChemin, chemin, sizeof(chemin_t));
 
       #pragma omp for 
       for (int i = 1; i < nbVilles; i++)

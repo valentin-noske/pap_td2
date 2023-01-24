@@ -8,6 +8,8 @@
 
 // #include <omp.h>
 
+// #define DEBUG_PROGRESS
+
 #define MAX_NBVILLES 22
 
 typedef int DTab_t[MAX_NBVILLES][MAX_NBVILLES];
@@ -100,10 +102,12 @@ void verifier_minimum(int lg, chemin_t chemin)
       if (d < minimum)
       {
         minimum = d;
+#ifdef DEBUG_PROGRESS
         printf("%3d :", minimum);
         for (int i = 0; i < nbVilles; i++)
           printf("%2d ", chemin[i]);
         printf("\n");
+#endif
       }
     }
   }
@@ -149,7 +153,6 @@ void tsp_ompfor(int etape, int lg, chemin_t chemin, int mask)
     {
       chemin_t monChemin;
       memcpy(monChemin, chemin, sizeof(chemin_t));
-
       #pragma omp for 
       for (int i = 1; i < nbVilles; i++)
       {
@@ -183,7 +186,7 @@ void tsp_seq_optimized(int etape, int lg, chemin_t chemin, int mask)
       {
         chemin[etape] = i;
         dist = distance[ici][i];
-        tsp_seq(etape + 1, lg + dist, chemin, mask | (1 << i));
+        tsp_seq_optimized(etape + 1, lg + dist, chemin, mask | (1 << i));
       }
     }
   }
@@ -191,9 +194,6 @@ void tsp_seq_optimized(int etape, int lg, chemin_t chemin, int mask)
 
 void tsp_ompfor_optimized(int etape, int lg, chemin_t chemin, int mask)
 {
-
-  if (lg + distance[0][chemin[etape-1]]>= minimum)
-    return;
 
   if (etape > grain) { // version séquentielle
     tsp_seq_optimized(etape, lg, chemin, mask);}
@@ -229,41 +229,63 @@ int main(int argc, char **argv)
 {
   unsigned long temps;
   struct timeval t1, t2;
-  chemin_t chemin;
 
   initialisation(argc, argv);
 
   printf("nbVilles = %3d - grain %d \n", nbVilles, grain);
-
-  //omp_set_max_active_levels(grain);
   omp_set_nested(1);
 
-  gettimeofday(&t1, NULL);
+  if (!strcmp(argv[argc-1],"compare")) {
+    for (int i = 0; i < 5; ++i) {
+      chemin_t chemin;
+      minimum = INT_MAX;
+      chemin[0] = 0;
+      char *fct;
+      gettimeofday(&t1, NULL);
+      switch (i) {
+        case 0: fct = "ompcol4_opt"; printf("======= %s =======\n", fct); tsp_ompcol4_opt(); break;
+        case 1: fct = "ompcol3_opt"; printf("======= %s =======\n", fct); tsp_ompcol3_opt(); break;
+        case 2: fct = "ompcol2_opt"; printf("======= %s =======\n", fct); tsp_ompcol2_opt(); break;
+        case 3: fct = "seq_opt"; printf("======= %s =======\n", fct); tsp_seq_optimized(1, 0, chemin, 1); break;
+        case 4: fct = "ompfor_opt"; printf("======= %s =======\n", fct); tsp_ompfor_optimized(1, 0, chemin, 1); break;
+      }
+      gettimeofday(&t2, NULL);
+      temps = TIME_DIFF(t1, t2);
+      fprintf(stderr, "%s: %ld.%03ld\n", fct, temps / 1000, temps % 1000);
+    }
 
-  chemin[0] = 0;
+  } else {
+    chemin_t chemin;
+    //omp_set_max_active_levels(grain);
+  
+    gettimeofday(&t1, NULL);
 
-  if (!strcmp(argv[argc-1],"seq")) 
-    tsp_seq(1, 0, chemin, 1);
-  else if (!strcmp(argv[argc-1],"ompfor")) 
-    tsp_ompfor(1, 0, chemin, 1);
-  else if (!strcmp(argv[argc-1],"ompfor_opt")) 
-    tsp_ompcol4(1, 0, chemin, 1);
-  else if (!strcmp(argv[argc-1],"ompcol2")) 
-    tsp_ompcol2(1, 0, chemin, 1);
-  else if (!strcmp(argv[argc-1],"ompcol3")) 
-    tsp_ompcol3(1, 0, chemin, 1);
-  else if (!strcmp(argv[argc-1],"ompcol4")) 
-    tsp_ompcol4(1, 0, chemin, 1);
-  else
-  {
+    chemin[0] = 0;
+
+    if (!strcmp(argv[argc-1],"seq")) 
+      tsp_seq(1, 0, chemin, 1);
+    else if (!strcmp(argv[argc-1],"seq_opt")) 
+      tsp_seq_optimized(1, 0, chemin, 1);
+    else if (!strcmp(argv[argc-1],"ompfor")) 
+      tsp_ompfor(1, 0, chemin, 1);
+    else if (!strcmp(argv[argc-1],"ompfor_opt")) 
+      tsp_ompfor_optimized(1, 0, chemin, 1);
+    else if (!strcmp(argv[argc-1],"ompcol2")) 
+      tsp_ompcol2(1, 0, chemin, 1);
+    else if (!strcmp(argv[argc-1],"ompcol3")) 
+      tsp_ompcol3(1, 0, chemin, 1);
+    else if (!strcmp(argv[argc-1],"ompcol4")) 
+      tsp_ompcol4(1, 0, chemin, 1);
+    else
+    {
       printf("kernel inconnu\n");
       exit(1);
-  }
+    }
       
-  gettimeofday(&t2, NULL);
+    gettimeofday(&t2, NULL);
 
-  temps = TIME_DIFF(t1, t2);
-  fprintf(stderr, "%ld.%03ld\n", temps / 1000, temps % 1000);
-
+    temps = TIME_DIFF(t1, t2);
+    fprintf(stderr, "%ld.%03ld\n", temps / 1000, temps % 1000);
+  }
   return 0;
 }

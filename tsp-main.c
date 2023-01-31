@@ -8,7 +8,7 @@
 
 // #include <omp.h>
 
-// #define DEBUG_PROGRESS
+#define DEBUG_PROGRESS
 
 #define MAX_NBVILLES 22
 
@@ -225,6 +225,44 @@ void tsp_ompfor_optimized(int etape, int lg, chemin_t chemin, int mask)
   }
 }
 
+void tsp_task_optimized(int etape, int lg, chemin_t chemin, int mask)
+{
+
+  if (etape > grain) { // version séquentielle
+    tsp_seq_optimized(etape, lg, chemin, mask);}
+    
+  else { // version parallèle
+
+    if (etape == nbVilles)
+      verifier_minimum(lg, chemin);
+
+    int ici, dist;
+    ici = chemin[etape - 1];
+
+    for (int i = 1; i < nbVilles; i++)
+    {
+      int *monChemin = malloc(nbVilles * sizeof(int));
+      if (!monChemin) {
+        fprintf(stderr, "malloc\n");
+      }
+      memcpy(monChemin, chemin, nbVilles * sizeof(int));
+
+      #pragma omp task firstprivate(ici, i, mask) shared(monChemin)
+      {
+        if (!present(i, mask))
+        {
+          monChemin[etape] = i;
+          dist = distance[ici][i];
+          tsp_task_optimized(etape + 1, lg + dist, monChemin, mask | (1 << i));
+        }
+        free(monChemin);
+      }
+
+      
+    }
+  }
+}
+
 int main(int argc, char **argv)
 {
   unsigned long temps;
@@ -262,20 +300,24 @@ int main(int argc, char **argv)
 
     chemin[0] = 0;
 
-    if (!strcmp(argv[argc-1],"seq")) 
+    if (!strcmp(argv[argc-1],"seq")) {
       tsp_seq(1, 0, chemin, 1);
-    else if (!strcmp(argv[argc-1],"seq_opt")) 
+    } else if (!strcmp(argv[argc-1],"seq_opt")) {
       tsp_seq_optimized(1, 0, chemin, 1);
-    else if (!strcmp(argv[argc-1],"ompfor")) 
+    } else if (!strcmp(argv[argc-1],"ompfor")) {
       tsp_ompfor(1, 0, chemin, 1);
-    else if (!strcmp(argv[argc-1],"ompfor_opt")) 
+    } else if (!strcmp(argv[argc-1],"ompfor_opt")) {
       tsp_ompfor_optimized(1, 0, chemin, 1);
-    else if (!strcmp(argv[argc-1],"ompcol2")) 
-      tsp_ompcol2(1, 0, chemin, 1);
-    else if (!strcmp(argv[argc-1],"ompcol3")) 
-      tsp_ompcol3(1, 0, chemin, 1);
-    else if (!strcmp(argv[argc-1],"ompcol4")) 
-      tsp_ompcol4(1, 0, chemin, 1);
+    } else if (!strcmp(argv[argc-1],"ompcol2")) {
+      tsp_ompcol2_opt(1, 0, chemin, 1);
+    } else if (!strcmp(argv[argc-1],"ompcol3")) {
+      tsp_ompcol3_opt(1, 0, chemin, 1);
+    } else if (!strcmp(argv[argc-1],"ompcol4")) {
+      tsp_ompcol4_opt(1, 0, chemin, 1);
+    } else if (!strcmp(argv[argc-1],"task_opt")){ 
+      #pragma omp parallel master
+      tsp_task_optimized(1, 0, chemin, 1);
+    }
     else
     {
       printf("kernel inconnu\n");
